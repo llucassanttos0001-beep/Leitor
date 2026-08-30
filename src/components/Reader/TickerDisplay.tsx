@@ -5,16 +5,16 @@ import { useTickerAnimation } from '../../hooks/useTickerAnimation';
 
 interface TickerDisplayProps {
   onWordClick?: (word: string, pos: { x: number; y: number }) => void;
+  onCenterTap?: () => void;
 }
 
-export const TickerDisplay: React.FC<TickerDisplayProps> = ({ onWordClick }) => {
+export const TickerDisplay: React.FC<TickerDisplayProps> = ({ onWordClick, onCenterTap }) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const isPlaying = useReaderStore((s) => s.isPlaying);
   const togglePlayPause = useReaderStore((s) => s.togglePlayPause);
   const pages = useReaderStore((s) => s.pages);
   const currentPage = useReaderStore((s) => s.currentPage);
-  const currentLine = useReaderStore((s) => s.currentLine);
 
   const fontSize = useAppStore((s) => s.fontSize);
   const fontFamily = useAppStore((s) => s.fontFamily);
@@ -36,83 +36,92 @@ export const TickerDisplay: React.FC<TickerDisplayProps> = ({ onWordClick }) => 
       onWordClick(selectedText, { x: e.clientX, y: e.clientY });
       return;
     }
-    togglePlayPause();
+
+    if (onCenterTap) {
+      onCenterTap();
+    } else {
+      togglePlayPause();
+    }
   };
 
-  const handleWordDoubleClick = (e: React.MouseEvent, word: string) => {
+  const handleWordClick = (e: React.MouseEvent, word: string) => {
     e.stopPropagation();
     if (!isPlaying && onWordClick) {
       const cleanWord = word.replace(/[^\wÀ-ÿ]/g, '');
       if (cleanWord) {
         onWordClick(cleanWord, { x: e.clientX, y: e.clientY });
       }
+    } else {
+      togglePlayPause();
     }
   };
 
-  const totalTextHeight = lines.length * (fontSize * lineHeight);
-  const containerHeight = containerRef.current?.clientHeight || window.innerHeight - 160;
-  const topOffset = Math.max(20, (containerHeight - totalTextHeight) / 2);
+  // Calculate actual pixel line height and vertical placement
+  const lineSpacingPx = Math.max(26, fontSize * lineHeight);
 
   return (
     <div
       ref={containerRef}
-      className="absolute inset-0 overflow-hidden cursor-pointer select-text"
+      className="absolute inset-0 overflow-hidden cursor-pointer select-text flex justify-center items-center px-4 sm:px-8"
       onClick={handleContainerClick}
-      style={{
-        paddingLeft: `${marginHorizontal}px`,
-        paddingRight: `${marginHorizontal}px`,
-      }}
     >
-      <div className="relative w-full h-full">
-        {lines.map((lineText, index) => {
-          const isPast = index < activeLineIndex;
-          const isActive = index === activeLineIndex;
-          const isFuture = index > activeLineIndex && (currentLine === -1 || index > currentLine);
-          const offset = linePositions.get(index);
-          const xOffset =
-            offset !== undefined ? offset : containerRef.current?.clientWidth || window.innerWidth;
+      <div
+        className="relative w-full max-w-2xl h-full flex flex-col justify-center"
+        style={{
+          paddingLeft: `${Math.min(marginHorizontal, 24)}px`,
+          paddingRight: `${Math.min(marginHorizontal, 24)}px`,
+        }}
+      >
+        <div className="relative w-full overflow-visible" style={{ minHeight: `${lines.length * lineSpacingPx}px` }}>
+          {lines.map((lineText, index) => {
+            const isPast = index < activeLineIndex;
+            const isActive = index === activeLineIndex;
+            const offset = linePositions.get(index);
+            const containerW = containerRef.current?.clientWidth || window.innerWidth;
+            const xOffset = offset !== undefined ? offset : containerW;
 
-          const words = lineText.split(' ');
+            const words = lineText.split(' ');
 
-          return (
-            <div
-              key={`${currentPage}-${index}`}
-              className="ticker-line absolute left-0 right-0"
-              style={{
-                transform: `translate3d(${xOffset}px, 0, 0)`,
-                top: `${topOffset + index * (fontSize * lineHeight)}px`,
-                fontSize: `${fontSize}px`,
-                fontFamily,
-                lineHeight: `${lineHeight}`,
-                wordSpacing: `${wordSpacing}px`,
-                opacity: fadePastLines && isPast ? 0.35 : isFuture ? 0.15 : 1,
-                transition: 'opacity 0.3s ease',
-                whiteSpace: 'nowrap',
-                color: 'var(--color-text)',
-                fontWeight: isActive ? 500 : 400,
-              }}
-            >
-              {words.map((word, wIdx) => (
-                <span
-                  key={wIdx}
-                  onDoubleClick={(e) => handleWordDoubleClick(e, word)}
-                  className="hover:text-[var(--color-accent)] transition-colors inline-block"
-                >
-                  {word}
-                  {wIdx < words.length - 1 ? '\u00A0' : ''}
-                </span>
-              ))}
+            return (
+              <div
+                key={`${currentPage}-${index}`}
+                className="ticker-line absolute left-0 right-0 will-change-transform"
+                style={{
+                  transform: `translate3d(${xOffset}px, 0, 0)`,
+                  top: `${index * lineSpacingPx}px`,
+                  fontSize: `${fontSize}px`,
+                  fontFamily: fontFamily || 'Inter, serif',
+                  lineHeight: `${lineHeight}`,
+                  letterSpacing: '0.01em',
+                  wordSpacing: `${wordSpacing}px`,
+                  opacity: fadePastLines && isPast ? 0.75 : 1,
+                  color: 'var(--color-text)',
+                  fontWeight: isActive ? 500 : 400,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {words.map((word, wIdx) => (
+                  <span
+                    key={wIdx}
+                    onClick={(e) => handleWordClick(e, word)}
+                    className="hover:text-[var(--color-accent)] transition-colors inline-block cursor-text"
+                  >
+                    {word}
+                    {wIdx < words.length - 1 ? '\u00A0' : ''}
+                  </span>
+                ))}
+              </div>
+            );
+          })}
+
+          {lines.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-20 text-center space-y-2">
+              <p className="text-[var(--color-text-secondary)] text-sm sm:text-base font-medium">
+                Pressione Iniciar ou toque na tela para ler em cascata
+              </p>
             </div>
-          );
-        })}
-
-        {lines.length === 0 && (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-[var(--color-text-secondary)] text-lg">
-              Pressione Play ou Espaço para começar
-            </p>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

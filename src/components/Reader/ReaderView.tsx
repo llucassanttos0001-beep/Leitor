@@ -6,6 +6,7 @@ import { useKeyboard } from '../../hooks/useKeyboard';
 import { ReaderToolbar } from './ReaderToolbar';
 import { ReaderControls } from './ReaderControls';
 import { TickerDisplay } from './TickerDisplay';
+import { QuickSettingsSheet } from './QuickSettingsSheet';
 import { BookmarkPanel } from '../Bookmarks/BookmarkPanel';
 import { DictionaryPopup } from '../Dictionary/DictionaryPopup';
 import { Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
@@ -14,10 +15,15 @@ export const ReaderView: React.FC = () => {
   const currentBookId = useAppStore((s) => s.currentBookId);
   const goToLibrary = useAppStore((s) => s.goToLibrary);
   const { loading, error, loadChapter } = useReader(currentBookId);
+
+  const currentChapter = useReaderStore((s) => s.currentChapter);
+  const totalChapters = useReaderStore((s) => s.totalChapters);
   const setCurrentPage = useReaderStore((s) => s.setCurrentPage);
   const setCurrentLine = useReaderStore((s) => s.setCurrentLine);
+  const togglePlayPause = useReaderStore((s) => s.togglePlayPause);
 
   const [bookmarksOpen, setBookmarksOpen] = useState(false);
+  const [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
   const [dictState, setDictState] = useState<{ word: string; pos: { x: number; y: number } } | null>(null);
 
   useKeyboard();
@@ -26,6 +32,18 @@ export const ReaderView: React.FC = () => {
     await loadChapter(chapter);
     setCurrentPage(page);
     setCurrentLine(line);
+  };
+
+  const handlePrevChapter = () => {
+    if (currentChapter > 0) {
+      loadChapter(currentChapter - 1);
+    }
+  };
+
+  const handleNextChapter = () => {
+    if (currentChapter < totalChapters - 1) {
+      loadChapter(currentChapter + 1);
+    }
   };
 
   if (!currentBookId) {
@@ -48,11 +66,11 @@ export const ReaderView: React.FC = () => {
     return (
       <div className="h-full flex items-center justify-center bg-[var(--color-bg)]">
         <div className="flex flex-col items-center gap-4">
-          <Loader2 size={48} className="text-[var(--color-accent)] animate-spin" />
-          <p className="text-[var(--color-text-secondary)] font-medium">Carregando livro...</p>
+          <Loader2 size={44} className="text-[var(--color-accent)] animate-spin" />
+          <p className="text-[var(--color-text-secondary)] text-sm font-medium">Carregando livro...</p>
           <button
             onClick={goToLibrary}
-            className="mt-4 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text)] underline"
+            className="mt-2 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] underline"
           >
             Cancelar e voltar
           </button>
@@ -64,7 +82,7 @@ export const ReaderView: React.FC = () => {
   if (error) {
     return (
       <div className="h-full flex items-center justify-center bg-[var(--color-bg)] flex-col gap-4 p-8">
-        <AlertCircle size={48} className="text-red-500" />
+        <AlertCircle size={44} className="text-red-500" />
         <p className="text-red-500 font-medium">Erro ao carregar livro</p>
         <p className="text-[var(--color-text-secondary)] text-center max-w-md text-sm">{error}</p>
         <button
@@ -79,12 +97,31 @@ export const ReaderView: React.FC = () => {
 
   return (
     <div className="relative h-full bg-[var(--color-bg)] overflow-hidden select-none flex flex-col">
-      <ReaderToolbar onOpenBookmarks={() => setBookmarksOpen(true)} />
-      <div className="flex-1 relative overflow-hidden">
-        <TickerDisplay onWordClick={(word, pos) => setDictState({ word, pos })} />
-      </div>
-      <ReaderControls />
+      {/* Top Header */}
+      <ReaderToolbar
+        onOpenBookmarks={() => setBookmarksOpen(true)}
+        onPrevChapter={handlePrevChapter}
+        onNextChapter={handleNextChapter}
+      />
 
+      {/* Main Cascade Text Area */}
+      <div className="flex-1 relative overflow-hidden">
+        <TickerDisplay
+          onWordClick={(word, pos) => setDictState({ word, pos })}
+          onCenterTap={() => togglePlayPause()}
+        />
+      </div>
+
+      {/* Bottom Controls Bar */}
+      <ReaderControls onOpenQuickSettings={() => setQuickSettingsOpen(true)} />
+
+      {/* Quick Settings Floating Sheet */}
+      <QuickSettingsSheet
+        isOpen={quickSettingsOpen}
+        onClose={() => setQuickSettingsOpen(false)}
+      />
+
+      {/* Bookmarks Drawer */}
       <BookmarkPanel
         bookId={currentBookId}
         isOpen={bookmarksOpen}
@@ -92,6 +129,7 @@ export const ReaderView: React.FC = () => {
         onNavigate={handleNavigateBookmark}
       />
 
+      {/* Dictionary Popup */}
       {dictState && (
         <DictionaryPopup
           word={dictState.word}

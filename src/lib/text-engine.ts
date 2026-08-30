@@ -12,6 +12,7 @@ export interface LineData {
   lineIndex: number;
   text: string;
   words: string[];
+  isParagraphStart?: boolean;
 }
 
 export interface PageData {
@@ -39,28 +40,27 @@ export class TextEngine {
   }
 
   private updateFont(): void {
-    this.ctx.font = `${this.config.fontSize}px ${this.config.fontFamily}`;
-    // HTML5 Canvas doesn't support wordSpacing directly in measureText for all browsers easily,
-    // but we approximate by adjusting space width if necessary.
+    this.ctx.font = `${this.config.fontSize}px ${this.config.fontFamily || 'Inter, sans-serif'}`;
   }
 
   public measureText(text: string): number {
     return this.ctx.measureText(text).width;
   }
 
-  public wrapLine(text: string, maxWidth: number): string[] {
-    const words = text.split(/\s+/);
+  public wrapParagraph(paragraph: string, maxWidth: number): string[] {
+    const words = paragraph.split(/\s+/).filter((w) => w.length > 0);
+    if (words.length === 0) return [];
+
     const lines: string[] = [];
     let currentLine = '';
 
     for (let i = 0; i < words.length; i++) {
       const word = words[i];
-      if (!word) continue;
-
       const testLine = currentLine ? `${currentLine} ${word}` : word;
       const metrics = this.ctx.measureText(testLine);
 
-      if (metrics.width > maxWidth && i > 0) {
+      // Wrap if width exceeds maxWidth, unless single word exceeds it
+      if (metrics.width > maxWidth && currentLine) {
         lines.push(currentLine);
         currentLine = word;
       } else {
@@ -76,26 +76,35 @@ export class TextEngine {
   }
 
   public paginateText(text: string): PageData[] {
-    if (!text) return [];
+    if (!text || !text.trim()) return [];
 
-    const availableWidth = Math.max(10, this.config.containerWidth - 2 * this.config.marginHorizontal);
-    // Line height is typically a multiplier like 1.5, actual pixels = fontSize * lineHeight
-    const actualLineHeight = this.config.fontSize * this.config.lineHeight;
-    const linesPerPage = Math.floor(this.config.containerHeight / actualLineHeight);
-    
-    if (linesPerPage <= 0) return [];
+    // Calculate usable dimensions with minimum safeguards for mobile
+    const horizontalPadding = Math.min(this.config.marginHorizontal, Math.max(16, this.config.containerWidth * 0.05));
+    const availableWidth = Math.max(200, this.config.containerWidth - horizontalPadding * 2);
+    const actualLineHeight = Math.max(24, this.config.fontSize * this.config.lineHeight);
 
-    const paragraphs = text.split(/\n+/);
-    const allLines: string[] = [];
+    // Calculate maximum lines that comfortably fit on screen without vertical cutoff
+    const linesPerPage = Math.max(3, Math.floor((this.config.containerHeight - 40) / actualLineHeight));
 
-    for (const p of paragraphs) {
-      const trimmed = p.trim();
-      if (!trimmed) {
-        allLines.push(''); // Empty line for spacing
-        continue;
-      }
-      const wrapped = this.wrapLine(trimmed, availableWidth);
-      allLines.push(...wrapped);
+    // Normalize raw text into clean paragraphs
+    const rawParagraphs = text
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      .split(/\n\s*\n|\n/);
+
+    const allLines: { text: string; isParagraphStart: boolean }[] = [];
+
+    for (const p of rawParagraphs) {
+      const cleanP = p.trim();
+      if (!cleanP) continue;
+
+      const wrapped = this.wrapParagraph(cleanP, availableWidth);
+      wrapped.forEach((lineText, idx) => {
+        allLines.push({
+          text: lineText,
+          isParagraphStart: idx === 0,
+        });
+      });
     }
 
     const pages: PageData[] = [];
@@ -103,17 +112,18 @@ export class TextEngine {
     let pageIndex = 0;
     let globalLineIndex = 0;
 
-    for (const line of allLines) {
+    for (const item of allLines) {
       currentLines.push({
         lineIndex: globalLineIndex++,
-        text: line,
-        words: line.split(' ').filter(w => w.length > 0)
+        text: item.text,
+        words: item.text.split(' ').filter((w) => w.length > 0),
+        isParagraphStart: item.isParagraphStart,
       });
 
       if (currentLines.length >= linesPerPage) {
         pages.push({
           pageIndex: pageIndex++,
-          lines: currentLines
+          lines: currentLines,
         });
         currentLines = [];
       }
@@ -122,7 +132,7 @@ export class TextEngine {
     if (currentLines.length > 0) {
       pages.push({
         pageIndex: pageIndex++,
-        lines: currentLines
+        lines: currentLines,
       });
     }
 
