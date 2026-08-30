@@ -6,6 +6,8 @@ import { clearLocalUserData } from '../lib/db';
 
 export type SyncStatus = 'offline' | 'idle' | 'syncing' | 'synced' | 'error';
 
+const SESSION_KEY = 'leitor_active_session_v1';
+
 export interface AuthState {
   user: User | null;
   session: Session | null;
@@ -37,6 +39,26 @@ export const useAuthStore = create<AuthState>((set) => ({
   setLastSyncedAt: (time) => set({ lastSyncedAt: time }),
 
   initAuth: async () => {
+    // 1. Check for active persistent master session
+    const saved = localStorage.getItem(SESSION_KEY);
+    if (saved) {
+      try {
+        const { user, session } = JSON.parse(saved);
+        if (user && session) {
+          set({
+            user,
+            session,
+            loading: false,
+            syncStatus: 'synced',
+            lastSyncedAt: Date.now(),
+          });
+          return;
+        }
+      } catch {
+        localStorage.removeItem(SESSION_KEY);
+      }
+    }
+
     const client = getSupabaseClient();
     const isConfigured = isSupabaseConfigured();
 
@@ -55,21 +77,21 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     try {
       const { data: { session } } = await client.auth.getSession();
-      set({
-        session,
-        user: session?.user || null,
-        loading: false,
-        syncStatus: session ? 'idle' : 'offline',
-      });
-
-      // Listen to auth changes
-      client.auth.onAuthStateChange((_event, newSession) => {
+      if (session?.user) {
         set({
-          session: newSession,
-          user: newSession?.user || null,
-          syncStatus: newSession ? 'idle' : 'offline',
+          session,
+          user: session.user,
+          loading: false,
+          syncStatus: 'synced',
         });
-      });
+      } else {
+        set({
+          session: null,
+          user: null,
+          loading: false,
+          syncStatus: 'offline',
+        });
+      }
     } catch (err) {
       console.error('Error initializing auth:', err);
       set({ loading: false, syncStatus: 'error' });
@@ -85,6 +107,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       return { error: res.error || 'Chave de acesso inválida.' };
     }
 
+    // Persist master session
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ user: res.user, session: res.session }));
+
     set({
       user: res.user,
       session: res.session,
@@ -96,6 +121,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   signOut: async () => {
+    localStorage.removeItem(SESSION_KEY);
+
     const client = getSupabaseClient();
     if (client) {
       await client.auth.signOut().catch(() => {});
