@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { User, Session } from '@supabase/supabase-js';
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase';
+import { clearLocalUserData } from '../lib/db';
 
 export type SyncStatus = 'offline' | 'idle' | 'syncing' | 'synced' | 'error';
 
@@ -8,7 +9,6 @@ export interface AuthState {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  isGuest: boolean;
   syncStatus: SyncStatus;
   lastSyncedAt: number | null;
   authModalOpen: boolean;
@@ -21,14 +21,12 @@ export interface AuthState {
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
   signUp: (email: string, password: string) => Promise<{ error?: string; message?: string }>;
   signOut: () => Promise<void>;
-  continueAsGuest: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   session: null,
   loading: true,
-  isGuest: false,
   syncStatus: 'offline',
   lastSyncedAt: null,
   authModalOpen: false,
@@ -61,7 +59,6 @@ export const useAuthStore = create<AuthState>((set) => ({
         session,
         user: session?.user || null,
         loading: false,
-        isGuest: false,
         syncStatus: session ? 'idle' : 'offline',
       });
 
@@ -70,7 +67,6 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({
           session: newSession,
           user: newSession?.user || null,
-          isGuest: false,
           syncStatus: newSession ? 'idle' : 'offline',
         });
       });
@@ -95,20 +91,19 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       if (error) {
         set({ syncStatus: 'error' });
-        return { error: error.message };
+        return { error: 'E-mail ou senha incorretos.' };
       }
 
       set({
         user: data.user,
         session: data.session,
-        isGuest: false,
         syncStatus: 'synced',
         lastSyncedAt: Date.now(),
       });
       return {};
-    } catch (err: any) {
+    } catch {
       set({ syncStatus: 'error' });
-      return { error: err.message || 'Erro ao autenticar.' };
+      return { error: 'Erro ao autenticar. Tente novamente.' };
     }
   },
 
@@ -119,20 +114,20 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
 
     try {
+      set({ syncStatus: 'syncing' });
       const { data, error } = await client.auth.signUp({
         email: email.trim(),
         password,
       });
 
       if (error) {
-        return { error: error.message };
+        return { error: error.message.includes('already') ? 'Este e-mail já está cadastrado.' : 'Não foi possível cadastrar. Verifique a senha.' };
       }
 
       if (data.session) {
         set({
           user: data.user,
           session: data.session,
-          isGuest: false,
           syncStatus: 'synced',
           lastSyncedAt: Date.now(),
         });
@@ -140,8 +135,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
 
       return { message: 'Conta criada! Verifique seu e-mail para confirmar o cadastro.' };
-    } catch (err: any) {
-      return { error: err.message || 'Erro ao criar conta.' };
+    } catch {
+      return { error: 'Erro ao criar conta. Tente novamente.' };
     }
   },
 
@@ -150,10 +145,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     if (client) {
       await client.auth.signOut().catch(() => {});
     }
-    set({ user: null, session: null, isGuest: false, syncStatus: 'offline' });
-  },
 
-  continueAsGuest: () => {
-    set({ isGuest: true, user: null, session: null, syncStatus: 'offline' });
+    // Security: Clear all cached library data from IndexedDB
+    try {
+      await clearLocalUserData();
+    } catch (e) {
+      console.warn('Failed to clear local user data on logout:', e);
+    }
+
+    set({ user: null, session: null, syncStatus: 'offline' });
   },
 }));

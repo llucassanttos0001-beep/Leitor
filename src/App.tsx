@@ -18,7 +18,7 @@ function App() {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
 
-  const { user, isGuest, loading, initAuth } = useAuthStore();
+  const { user, session, loading, initAuth } = useAuthStore();
 
   // Initialize auth session on mount
   useEffect(() => {
@@ -36,7 +36,7 @@ function App() {
   const tVal = colorTemperature ?? 6500;
   const tempAlpha = Math.max(0, ((6500 - tVal) / (6500 - 2700)) * 0.35);
 
-  const isAuthenticated = Boolean(user || isGuest);
+  const isAuthenticated = Boolean(user && session);
 
   return (
     <ThemeProvider>

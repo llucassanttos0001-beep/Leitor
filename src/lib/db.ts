@@ -126,3 +126,17 @@ export async function importAllData(json: string): Promise<void> {
     if (data.settings) await db.settings.bulkPut(data.settings);
   });
 }
+
+// Clear all user data from local database (used on logout/security reset)
+export async function clearLocalUserData(): Promise<void> {
+  await db.transaction('rw', [db.books, db.readingProgress, db.bookmarks, db.readingSessions, db.vocabulary, db.settings], async () => {
+    await db.books.clear();
+    await db.readingProgress.clear();
+    await db.bookmarks.clear();
+    await db.readingSessions.clear();
+    await db.vocabulary.clear();
+    await db.settings.clear();
+  });
+}
+
+
