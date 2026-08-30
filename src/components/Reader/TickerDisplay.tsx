@@ -21,9 +21,8 @@ export const TickerDisplay: React.FC<TickerDisplayProps> = ({ onWordClick, onCen
   const lineHeight = useAppStore((s) => s.lineHeight);
   const wordSpacing = useAppStore((s) => s.wordSpacing);
   const marginHorizontal = useAppStore((s) => s.marginHorizontal);
-  const fadePastLines = useAppStore((s) => s.fadePastLines);
 
-  const { linePositions, activeLineIndex } = useTickerAnimation(containerRef);
+  useTickerAnimation(containerRef);
 
   const currentPageData = pages[currentPage];
   const lines = currentPageData?.lines || [];
@@ -56,8 +55,8 @@ export const TickerDisplay: React.FC<TickerDisplayProps> = ({ onWordClick, onCen
     }
   };
 
-  // Calculate actual pixel line height and vertical placement
-  const lineSpacingPx = Math.max(26, fontSize * lineHeight);
+  // Line spacing in pixels
+  const lineSpacingPx = Math.max(28, fontSize * lineHeight);
 
   return (
     <div
@@ -68,18 +67,15 @@ export const TickerDisplay: React.FC<TickerDisplayProps> = ({ onWordClick, onCen
       <div
         className="relative w-full max-w-2xl h-full flex flex-col justify-center"
         style={{
-          paddingLeft: `${Math.min(marginHorizontal, 24)}px`,
-          paddingRight: `${Math.min(marginHorizontal, 24)}px`,
+          paddingLeft: `${Math.min(marginHorizontal, 20)}px`,
+          paddingRight: `${Math.min(marginHorizontal, 20)}px`,
         }}
       >
-        <div className="relative w-full overflow-visible" style={{ minHeight: `${lines.length * lineSpacingPx}px` }}>
+        <div
+          className="relative w-full overflow-hidden"
+          style={{ minHeight: `${Math.max(100, lines.length * lineSpacingPx)}px` }}
+        >
           {lines.map((lineText, index) => {
-            const isPast = index < activeLineIndex;
-            const isActive = index === activeLineIndex;
-            const offset = linePositions.get(index);
-            const containerW = containerRef.current?.clientWidth || window.innerWidth;
-            const xOffset = offset !== undefined ? offset : containerW;
-
             const words = lineText.split(' ');
 
             return (
@@ -87,16 +83,13 @@ export const TickerDisplay: React.FC<TickerDisplayProps> = ({ onWordClick, onCen
                 key={`${currentPage}-${index}`}
                 className="ticker-line absolute left-0 right-0 will-change-transform"
                 style={{
-                  transform: `translate3d(${xOffset}px, 0, 0)`,
                   top: `${index * lineSpacingPx}px`,
                   fontSize: `${fontSize}px`,
                   fontFamily: fontFamily || 'Inter, serif',
                   lineHeight: `${lineHeight}`,
                   letterSpacing: '0.01em',
                   wordSpacing: `${wordSpacing}px`,
-                  opacity: fadePastLines && isPast ? 0.75 : 1,
                   color: 'var(--color-text)',
-                  fontWeight: isActive ? 500 : 400,
                   whiteSpace: 'nowrap',
                 }}
               >
