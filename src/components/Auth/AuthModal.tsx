@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Tabs from '@radix-ui/react-tabs';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Cloud, CloudOff, RefreshCw, CheckCircle, AlertCircle, LogIn, UserPlus, LogOut, Key, Database, Copy, Check } from 'lucide-react';
+import { X, Cloud, RefreshCw, CheckCircle, AlertCircle, LogIn, UserPlus, LogOut, Key, Copy, Check } from 'lucide-react';
 import { useAuthStore } from '../../stores/auth-store';
 import { syncEngine } from '../../lib/sync-engine';
 import { formatDate } from '../../lib/utils';

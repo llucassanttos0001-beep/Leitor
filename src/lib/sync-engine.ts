@@ -1,5 +1,5 @@
 import { getSupabaseClient } from './supabase';
-import { db, getAllBooks, saveBook, getProgress, saveProgress, getBookmarks, addBookmark } from './db';
+import { getAllBooks, saveBook, getProgress, saveProgress, getBookmarks, addBookmark } from './db';
 import { useAuthStore } from '../stores/auth-store';
 import { useAppStore } from '../stores/app-store';
 import type { Book, Bookmark } from '../types';
