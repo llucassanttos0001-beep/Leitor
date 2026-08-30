@@ -1,0 +1,13 @@
+{
+  "name": "Leitor - Leitura Imersiva",
+  "short_name": "Leitor",
+  "description": "Plataforma de leitura imersiva com animação dinâmica linha a linha",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#FAF9F6",
+  "theme_color": "#3B82F6",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
