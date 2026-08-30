@@ -80,7 +80,7 @@ export const LibraryHeader: React.FC<LibraryHeaderProps> = ({ onImportBooks }) =
               {syncStatus === 'syncing'
                 ? 'Sincronizando'
                 : user
-                ? user.email?.split('@')[0]
+                ? 'Conectado'
                 : 'Nuvem'}
             </span>
           </button>

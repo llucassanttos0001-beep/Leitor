@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { User, Session } from '@supabase/supabase-js';
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase';
+import { authenticateMasterKey } from '../lib/crypto-auth';
 import { clearLocalUserData } from '../lib/db';
 
 export type SyncStatus = 'offline' | 'idle' | 'syncing' | 'synced' | 'error';
@@ -18,8 +19,7 @@ export interface AuthState {
   setSyncStatus: (status: SyncStatus) => void;
   setLastSyncedAt: (time: number) => void;
   initAuth: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<{ error?: string }>;
-  signUp: (email: string, password: string) => Promise<{ error?: string; message?: string }>;
+  loginWithMasterKey: (masterKey: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
 }
 
@@ -76,68 +76,23 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  signIn: async (email, password) => {
-    const client = getSupabaseClient();
-    if (!client) {
-      return { error: 'Servidor de autenticação indisponível.' };
-    }
+  loginWithMasterKey: async (masterKey: string) => {
+    set({ syncStatus: 'syncing' });
+    const res = await authenticateMasterKey(masterKey);
 
-    try {
-      set({ syncStatus: 'syncing' });
-      const { data, error } = await client.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
-
-      if (error) {
-        set({ syncStatus: 'error' });
-        return { error: 'E-mail ou senha incorretos.' };
-      }
-
-      set({
-        user: data.user,
-        session: data.session,
-        syncStatus: 'synced',
-        lastSyncedAt: Date.now(),
-      });
-      return {};
-    } catch {
+    if (res.error || !res.session || !res.user) {
       set({ syncStatus: 'error' });
-      return { error: 'Erro ao autenticar. Tente novamente.' };
-    }
-  },
-
-  signUp: async (email, password) => {
-    const client = getSupabaseClient();
-    if (!client) {
-      return { error: 'Servidor de autenticação indisponível.' };
+      return { error: res.error || 'Chave de acesso inválida.' };
     }
 
-    try {
-      set({ syncStatus: 'syncing' });
-      const { data, error } = await client.auth.signUp({
-        email: email.trim(),
-        password,
-      });
+    set({
+      user: res.user,
+      session: res.session,
+      syncStatus: 'synced',
+      lastSyncedAt: Date.now(),
+    });
 
-      if (error) {
-        return { error: error.message.includes('already') ? 'Este e-mail já está cadastrado.' : 'Não foi possível cadastrar. Verifique a senha.' };
-      }
-
-      if (data.session) {
-        set({
-          user: data.user,
-          session: data.session,
-          syncStatus: 'synced',
-          lastSyncedAt: Date.now(),
-        });
-        return { message: 'Conta criada com sucesso!' };
-      }
-
-      return { message: 'Conta criada! Verifique seu e-mail para confirmar o cadastro.' };
-    } catch {
-      return { error: 'Erro ao criar conta. Tente novamente.' };
-    }
+    return {};
   },
 
   signOut: async () => {

@@ -94,9 +94,9 @@ export function AuthModal() {
                         <User size={20} />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs text-[var(--color-text-secondary)]">Conta Conectada</p>
+                        <p className="text-xs text-[var(--color-text-secondary)]">Acesso Autenticado</p>
                         <p className="text-sm font-semibold text-[var(--color-text)] truncate max-w-[200px]">
-                          {user?.email}
+                          Sessão Privada
                         </p>
                       </div>
                     </div>

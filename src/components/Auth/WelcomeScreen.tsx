@@ -1,127 +1,99 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../../stores/auth-store';
 import { syncEngine } from '../../lib/sync-engine';
+import { ArrowRight, Lock } from 'lucide-react';
 
 export function WelcomeScreen() {
-  const { signIn, signUp } = useAuthStore();
-  const [isRegister, setIsRegister] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const { loginWithMasterKey } = useAuthStore();
+  const [key, setKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const autoCheckedRef = useRef(false);
+
+  // Auto-login via Secret URL Hash (e.g. https://leitor-alpha.vercel.app/#minha-chave)
+  useEffect(() => {
+    if (autoCheckedRef.current) return;
+    autoCheckedRef.current = true;
+
+    const hash = window.location.hash.replace(/^#/, '').trim();
+    if (hash) {
+      // Immediately wipe secret from browser URL & history
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+
+      const secret = decodeURIComponent(hash);
+      if (secret.length >= 3) {
+        setLoading(true);
+        loginWithMasterKey(secret).then((res) => {
+          setLoading(false);
+          if (!res.error) {
+            syncEngine.syncAll().catch(() => {});
+          }
+        });
+      }
+    }
+  }, [loginWithMasterKey]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) return;
-
-    if (isRegister && password.length < 6) {
-      setError('A senha deve ter no mínimo 6 caracteres.');
-      return;
-    }
+    if (!key.trim() || loading) return;
 
     setLoading(true);
     setError(null);
-    setSuccessMessage(null);
 
-    if (isRegister) {
-      const res = await signUp(email, password);
-      setLoading(false);
-      if (res.error) {
-        setError(res.error);
-      } else {
-        if (res.message) {
-          setSuccessMessage(res.message);
-        }
-        if (useAuthStore.getState().user) {
-          syncEngine.syncAll().catch(() => {});
-        }
-      }
+    const res = await loginWithMasterKey(key);
+    setLoading(false);
+
+    if (res.error) {
+      setError(res.error);
     } else {
-      const res = await signIn(email, password);
-      setLoading(false);
-      if (res.error) {
-        setError(res.error);
-      } else {
-        syncEngine.syncAll().catch(() => {});
-      }
+      syncEngine.syncAll().catch(() => {});
     }
   };
 
   return (
     <div className="w-screen h-screen min-h-[100dvh] flex items-center justify-center p-6 bg-[var(--color-bg)] text-[var(--color-text)] select-none">
       <div className="w-full max-w-xs space-y-6">
-        {/* Subtle Brand */}
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold tracking-tight text-[var(--color-text)]">
+        {/* Subtle, Anonymous Header */}
+        <div className="space-y-1 text-center">
+          <div className="w-9 h-9 mx-auto rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-secondary)] mb-3">
+            <Lock size={16} />
+          </div>
+          <h1 className="text-base font-medium tracking-tight text-[var(--color-text)]">
             Leitor
           </h1>
-          <p className="text-xs text-[var(--color-text-secondary)]">
-            {isRegister ? 'Crie sua conta' : 'Acesse sua biblioteca'}
-          </p>
         </div>
 
-        {/* Error Message */}
+        {/* Error Notification */}
         {error && (
-          <div className="text-xs text-red-500 bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-lg">
+          <div className="text-xs text-center text-red-500 bg-red-500/10 border border-red-500/20 px-3 py-2 rounded-lg">
             {error}
           </div>
         )}
 
-        {/* Success Message */}
-        {successMessage && (
-          <div className="text-xs text-green-500 bg-green-500/10 border border-green-500/20 px-3 py-2 rounded-lg">
-            {successMessage}
-          </div>
-        )}
-
-        {/* Minimal Form */}
+        {/* Minimalist Single-Key Access Form */}
         <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="E-mail"
-              className="w-full text-xs px-3 py-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)]/60 focus:outline-none focus:border-[var(--color-accent)] transition-colors"
-            />
-          </div>
-
-          <div>
+          <div className="relative flex items-center">
             <input
               type="password"
+              autoFocus
               required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Senha"
-              className="w-full text-xs px-3 py-2.5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)]/60 focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+              placeholder="Chave de acesso"
+              disabled={loading}
+              className="w-full text-xs px-3.5 py-2.5 pr-10 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text)] placeholder-[var(--color-text-secondary)]/50 focus:outline-none focus:border-[var(--color-accent)] transition-colors"
             />
+
+            <button
+              type="submit"
+              disabled={loading || !key.trim()}
+              className="absolute right-1.5 p-1.5 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 active:scale-95 disabled:opacity-30 transition-all"
+              title="Entrar"
+            >
+              <ArrowRight size={14} className={loading ? 'animate-pulse' : ''} />
+            </button>
           </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2.5 bg-[var(--color-text)] text-[var(--color-bg)] text-xs font-medium rounded-lg hover:opacity-90 active:scale-98 transition-all disabled:opacity-50"
-          >
-            {loading ? 'Aguarde...' : isRegister ? 'Cadastrar' : 'Entrar'}
-          </button>
         </form>
-
-        {/* Switch mode */}
-        <div className="flex items-center justify-center text-[11px] text-[var(--color-text-secondary)] pt-2 border-t border-[var(--color-border)]">
-          <button
-            type="button"
-            onClick={() => {
-              setIsRegister(!isRegister);
-              setError(null);
-              setSuccessMessage(null);
-            }}
-            className="hover:text-[var(--color-text)] transition-colors"
-          >
-            {isRegister ? 'Já tenho uma conta. Entrar' : 'Criar nova conta'}
-          </button>
-        </div>
       </div>
     </div>
   );
