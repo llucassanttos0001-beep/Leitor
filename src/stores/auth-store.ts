@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { User, Session } from '@supabase/supabase-js';
-import { getSupabaseClient, setSupabaseCredentials, clearSupabaseCredentials } from '../lib/supabase';
+import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase';
 
 export type SyncStatus = 'offline' | 'idle' | 'syncing' | 'synced' | 'error';
 
@@ -8,10 +8,11 @@ export interface AuthState {
   user: User | null;
   session: Session | null;
   loading: boolean;
+  isGuest: boolean;
   syncStatus: SyncStatus;
   lastSyncedAt: number | null;
   authModalOpen: boolean;
-  supabaseConfigured: boolean;
+  configured: boolean;
 
   setAuthModalOpen: (open: boolean) => void;
   setSyncStatus: (status: SyncStatus) => void;
@@ -20,18 +21,18 @@ export interface AuthState {
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
   signUp: (email: string, password: string) => Promise<{ error?: string; message?: string }>;
   signOut: () => Promise<void>;
-  updateConfig: (url: string, key: string) => void;
-  removeConfig: () => void;
+  continueAsGuest: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
+export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   session: null,
   loading: true,
+  isGuest: false,
   syncStatus: 'offline',
   lastSyncedAt: null,
   authModalOpen: false,
-  supabaseConfigured: !!getSupabaseClient(),
+  configured: isSupabaseConfigured(),
 
   setAuthModalOpen: (open) => set({ authModalOpen: open }),
   setSyncStatus: (status) => set({ syncStatus: status }),
@@ -39,12 +40,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   initAuth: async () => {
     const client = getSupabaseClient();
-    if (!client) {
-      set({ loading: false, user: null, session: null, supabaseConfigured: false, syncStatus: 'offline' });
+    const isConfigured = isSupabaseConfigured();
+
+    if (!client || !isConfigured) {
+      set({
+        loading: false,
+        user: null,
+        session: null,
+        configured: false,
+        syncStatus: 'offline',
+      });
       return;
     }
 
-    set({ supabaseConfigured: true, loading: true });
+    set({ configured: true, loading: true });
 
     try {
       const { data: { session } } = await client.auth.getSession();
@@ -52,6 +61,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         session,
         user: session?.user || null,
         loading: false,
+        isGuest: false,
         syncStatus: session ? 'idle' : 'offline',
       });
 
@@ -60,6 +70,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({
           session: newSession,
           user: newSession?.user || null,
+          isGuest: false,
           syncStatus: newSession ? 'idle' : 'offline',
         });
       });
@@ -72,7 +83,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signIn: async (email, password) => {
     const client = getSupabaseClient();
     if (!client) {
-      return { error: 'Servidor Supabase não configurado. Adicione a URL e a Anon Key.' };
+      return { error: 'Servidor de autenticação indisponível.' };
     }
 
     try {
@@ -90,20 +101,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({
         user: data.user,
         session: data.session,
+        isGuest: false,
         syncStatus: 'synced',
         lastSyncedAt: Date.now(),
       });
       return {};
     } catch (err: any) {
       set({ syncStatus: 'error' });
-      return { error: err.message || 'Erro ao conectar com o servidor.' };
+      return { error: err.message || 'Erro ao autenticar.' };
     }
   },
 
   signUp: async (email, password) => {
     const client = getSupabaseClient();
     if (!client) {
-      return { error: 'Servidor Supabase não configurado. Adicione a URL e a Anon Key.' };
+      return { error: 'Servidor de autenticação indisponível.' };
     }
 
     try {
@@ -120,6 +132,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({
           user: data.user,
           session: data.session,
+          isGuest: false,
           syncStatus: 'synced',
           lastSyncedAt: Date.now(),
         });
@@ -137,19 +150,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (client) {
       await client.auth.signOut().catch(() => {});
     }
-    set({ user: null, session: null, syncStatus: 'offline' });
+    set({ user: null, session: null, isGuest: false, syncStatus: 'offline' });
   },
 
-  updateConfig: (url, key) => {
-    const client = setSupabaseCredentials(url, key);
-    if (client) {
-      set({ supabaseConfigured: true });
-      get().initAuth();
-    }
-  },
-
-  removeConfig: () => {
-    clearSupabaseCredentials();
-    set({ supabaseConfigured: false, user: null, session: null, syncStatus: 'offline' });
+  continueAsGuest: () => {
+    set({ isGuest: true, user: null, session: null, syncStatus: 'offline' });
   },
 }));

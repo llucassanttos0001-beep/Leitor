@@ -1,5 +1,5 @@
 -- ==============================================================================
--- SCHEMA SUPABASE: LEITOR (LEITURA IMERSIVA COM CLOUD SYNC)
+-- SCHEMA SUPABASE DE ALTA SEGURANÇA: LEITOR (COM RLS RIGOROSO)
 -- Execute este script no "SQL Editor" do seu painel do Supabase.
 -- ==============================================================================
 
@@ -75,8 +75,8 @@ CREATE TABLE IF NOT EXISTS public.user_settings (
 );
 
 -- ==============================================================================
--- SEGURANÇA: ROW LEVEL SECURITY (RLS)
--- Garante que cada usuário acesse exclusivamente seus próprios registros.
+-- SEGURANÇA TOTAL: ROW LEVEL SECURITY (RLS)
+-- Garante que NENHUM usuário acesse dados de outro usuário.
 -- ==============================================================================
 
 ALTER TABLE public.books ENABLE ROW LEVEL SECURITY;
@@ -85,39 +85,62 @@ ALTER TABLE public.bookmarks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.vocabulary ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
 
--- Políticas para Books
+-- Limpar políticas antigas se existirem
+DROP POLICY IF EXISTS "Usuário pode gerenciar seus próprios livros" ON public.books;
+DROP POLICY IF EXISTS "Usuário pode gerenciar seu próprio progresso" ON public.reading_progress;
+DROP POLICY IF EXISTS "Usuário pode gerenciar seus próprios marcadores" ON public.bookmarks;
+DROP POLICY IF EXISTS "Usuário pode gerenciar seu vocabulário" ON public.vocabulary;
+DROP POLICY IF EXISTS "Usuário pode gerenciar suas configurações" ON public.user_settings;
+
+-- Políticas Estritas para Books
 CREATE POLICY "Usuário pode gerenciar seus próprios livros" ON public.books
-    FOR ALL USING (auth.uid() = user_id);
+    FOR ALL
+    TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
 
--- Políticas para Reading Progress
+-- Políticas Estritas para Reading Progress
 CREATE POLICY "Usuário pode gerenciar seu próprio progresso" ON public.reading_progress
-    FOR ALL USING (auth.uid() = user_id);
+    FOR ALL
+    TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
 
--- Políticas para Bookmarks
+-- Políticas Estritas para Bookmarks
 CREATE POLICY "Usuário pode gerenciar seus próprios marcadores" ON public.bookmarks
-    FOR ALL USING (auth.uid() = user_id);
+    FOR ALL
+    TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
 
--- Políticas para Vocabulary
+-- Políticas Estritas para Vocabulary
 CREATE POLICY "Usuário pode gerenciar seu vocabulário" ON public.vocabulary
-    FOR ALL USING (auth.uid() = user_id);
+    FOR ALL
+    TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
 
--- Políticas para User Settings
+-- Políticas Estritas para User Settings
 CREATE POLICY "Usuário pode gerenciar suas configurações" ON public.user_settings
-    FOR ALL USING (auth.uid() = user_id);
+    FOR ALL
+    TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
 
 -- ==============================================================================
--- STORAGE: BUCKET PARA ARQUIVOS EPUB E CAPAS (OPCIONAL)
+-- STORAGE PRIVADO (SEM ACESSO PÚBLICO)
 -- ==============================================================================
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('books', 'books', true)
-ON CONFLICT (id) DO NOTHING;
+VALUES ('books', 'books', false)
+ON CONFLICT (id) DO UPDATE SET public = false;
 
-CREATE POLICY "Usuários autenticados podem fazer upload de livros"
+-- Permitir upload apenas na pasta do próprio usuário (ex: /books/{user_id}/livro.epub)
+CREATE POLICY "Upload seguro de livros por usuário"
 ON storage.objects FOR INSERT
 TO authenticated
-WITH CHECK (bucket_id = 'books');
+WITH CHECK (bucket_id = 'books' AND auth.uid()::text = (storage.foldername(name))[1]);
 
-CREATE POLICY "Qualquer pessoa pode ler arquivos de livros com link"
+CREATE POLICY "Leitura segura de livros pelo proprietário"
 ON storage.objects FOR SELECT
-TO public
-USING (bucket_id = 'books');
+TO authenticated
+USING (bucket_id = 'books' AND auth.uid()::text = (storage.foldername(name))[1]);
